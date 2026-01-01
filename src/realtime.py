@@ -12,6 +12,41 @@ import pyttsx3
 import time
 
 # -------------------------------------------------
+# WORD DICTIONARY & WORD BREAK LOGIC
+# -------------------------------------------------
+WORD_DICTIONARY = {
+    "i","love","you","thank","please","help","me","sorry",
+    "yes","no","good","morning","afternoon","night","welcome",
+    "ok","fine","hello","my","name","is","how","are"
+}
+
+def word_break(s, word_dict):
+    s = s.lower()
+    memo = {}
+
+    def dfs(index):
+        if index == len(s):
+            return [""]
+
+        if index in memo:
+            return memo[index]
+
+        result = []
+        for end in range(index + 1, len(s) + 1):
+            word = s[index:end]
+            if word in word_dict:
+                sub = dfs(end)
+                for sentence in sub:
+                    result.append(word + ("" if sentence == "" else " " + sentence))
+
+        memo[index] = result
+        return result
+
+    result = dfs(0)
+    return result[0] if result else s   # fallback to original if no split
+
+
+# -------------------------------------------------
 # SETUP
 # -------------------------------------------------
 logger = get_logger("realtime")
@@ -118,25 +153,26 @@ cap.release()
 # -------------------------------------------------
 print("\nDetected Sign Words (Unique):")
 if detected_words:
-    for w in detected_words:
-        print(w)
+    processed_sentence = ""
+
+    for word in detected_words:
+        # APPLY WORD BREAK HERE
+        segmented = word_break(word, WORD_DICTIONARY)
+        processed_sentence += segmented + " "
+
+    processed_sentence = processed_sentence.strip()
+    print(processed_sentence)
 
     engine = pyttsx3.init()
-    engine.setProperty('rate', 110)  # slow readable speed
-    engine.setProperty('volume', 3.0)
+    engine.setProperty('rate', 110)  # readable speed
+    engine.setProperty('volume', 0.9)
 
-    print("\nDetected Sign Words (Unique):")
-    y=""
-    for word in detected_words:
-        y+=word  # print nicely
-        y+=" "
-    print(y.strip())
-
-    # Read the whole sentence slowly
-    engine.say(y)
-
+    engine.say(processed_sentence)
     engine.runAndWait()
+
 else:
     print("No words detected during the session.")
-print(detected_words)
+
+print("Raw detected labels:", detected_words)
 cv2.destroyAllWindows()
+
