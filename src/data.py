@@ -48,21 +48,22 @@ class DETRData(Dataset):
             "Normalize (ImageNet stats)",
             "Convert to Tensor"
         ]
-        self.data_handler.log_transform_info(transform_list)             
+        self.data_handler.log_transform_info(transform_list)
 
     def safe_transform(self, image, bboxes, labels, max_attempts=50):
+        # Your existing augmentation pipeline
         self.transform = A.Compose(
-            [   
-                A.Resize(500,500),
-                *([A.RandomCrop(width=224, height=224, p=0.33)] if self.train else []), # Example random crop
-                A.Resize(224,224),
+            [
+                A.Resize(500, 500),
+                *([A.RandomCrop(width=224, height=224, p=0.33)] if self.train else []),
+                A.Resize(224, 224),
                 *([A.HorizontalFlip(p=0.5)] if self.train else []),
                 *([A.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5, p=0.5)] if self.train else []),
                 A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 A.ToTensorV2()
             ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels'])
         )
-        
+
         for attempt in range(max_attempts):
             try:
                 transformed = self.transform(image=image, bboxes=bboxes, class_labels=labels)
@@ -71,8 +72,26 @@ class DETRData(Dataset):
                     return transformed
             except:
                 continue
-        
-        return {'image': image, 'bboxes': bboxes, 'class_labels': labels}
+
+        # --- FIX: Fallback must still resize and normalize ---
+        try:
+            fallback = A.Compose([
+                A.Resize(224, 224),
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                A.ToTensorV2()
+            ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
+
+            return fallback(image=image, bboxes=bboxes, class_labels=labels)
+        except:
+            # Absolute fallback: If even resizing with boxes fails (e.g., bad labels),
+            # return the resized image with EMPTY boxes so training doesn't crash.
+            simple_fallback = A.Compose([
+                A.Resize(224, 224),
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                A.ToTensorV2()
+            ])
+            transformed = simple_fallback(image=image)
+            return {'image': transformed['image'], 'bboxes': [], 'class_labels': []}
 
     def __len__(self): 
         return len(self.labels) 
@@ -104,7 +123,7 @@ class DETRData(Dataset):
         return augmented_img_tensor, {'labels': labels, 'boxes': boxes}
 
 if __name__ == '__main__':
-    dataset = DETRData('data/train', train=True) 
+    dataset = DETRData('data/test', train=False)
     dataloader = DataLoader(dataset, collate_fn=stacker, batch_size=4, drop_last=True)
 
     X, y = next(iter(dataloader))
